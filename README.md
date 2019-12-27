@@ -7,7 +7,7 @@ The dataset consists of 10 millions of rows and 6 columns. The columns include u
 The foundation of the recommendation system is built by developing an algorithm to predict the ratings of movies to that the users haven't given. Movies with high predicted ratings will be recommended to the users.
 
 # Machine Learning Methods
-##Data Preparation
+## Data Preparation
 Before kicking start the machine learning, install the required packages and download the 10M MovieLens data file. Run the scripts to convert the data file into dataframe format. The dataframe is named as "movielens".
 
 ```{r Install Necessary Packages}
@@ -44,7 +44,7 @@ movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))
 movielens <- left_join(ratings, movies, by = "movieId")
 ```
 
-##Split the dataset into training and test set
+## Split the dataset into training and test set
 To ensure that the data used in prediction is not included in training data used in building the algorithm, the dataset is splitted randomly into training set and valiation set by "caret" pacakge (here the random seed is set as 1). 10% of data is taken as test set. To make sure userId and movieId in test set also exist in training set, semi join to the test set against the training set is done.
 
 ```{r Create training set and test set, test set will be 10% of data}
@@ -70,7 +70,7 @@ train <- rbind(train, removed)
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
 ```
 
-##Create RMSE function
+## Create RMSE function
 Create the function of RMSE which evaluates the prediction accuracy of the algorithm. RMSE represents the square root of the mean of the square of the difference between predicted values and observed values.
 
 ```{r Create RMSE function}
@@ -79,7 +79,7 @@ RMSE <- function(true_ratings, predicted_ratings){
 }
 ```
 
-##Create the First Model
+## Create the First Model
 The first model is a simple tryout by predicting the same rating for all movies regardless of user. Variable mu represents the average of all ratings in the training set.
 ```{r First Model - Predict the same rating for all movies regardless of user}
 mu <- mean(train$rating)
@@ -97,7 +97,7 @@ Create a table that is going to compare the RMSE results of various models.
 rmse_results <- tibble(method = "Just the average", RMSE = model_1_rmse)
 ```
 
-##Create the Second Model
+## Create the Second Model
 The second model takes the movie effect into account. Estimate the movie effect b_i by taking the mean of rating - mu by movieId.
 ```{r Second Model - Modeling movie effect}
 movie_avgs <- train %>% group_by(movieId) %>% summarize(b_i = mean(rating - mu))
@@ -124,7 +124,7 @@ Put the RMSE to the table.
 rmse_results <- bind_rows(rmse_results, data_frame(method="Movie Effect Model",RMSE=model_2_rmse))
 ```
 
-##Create the Third Model
+## Create the Third Model
 The third model adds the user effect on top of the second model. Estimate the user effect b_u by taking the mean of rating - mu - b_i by movieId.
 ```{r Third Model - Modeling User effects}
 user_avgs <- train %>% left_join(movie_avgs, by='movieId') %>% group_by(userId) %>% summarize(b_u = mean(rating - mu - b_i))
@@ -153,11 +153,11 @@ rmse_results <- bind_rows(rmse_results,
                                      RMSE = model_3_rmse))
 ```
 
-#Results
+# Results
 ```{r Review the RMSE table}
 rmse_results
 ```
 Based on the RMSE results table, the Third Model, which includes both the movie and user effect, gives the lowest RMSE value at 0.864 and provides the best estimation.
 
-#Conclusion
+# Conclusion
 In the project 3 models are built. The first model, being a simple naive model, gives an initial idea that if the mean of all ratings in the training dataset is taken as the predicted value for all predictions, the RMSE is as high as more than 1. When the movie effect is introduced in the second model, the RMSE drops to 0.942. When user effect is further introduced in the third model, the prediction accuracy further improves and RMSE drops to 0.864. It is suggested to apply the Third Model in the movie recommendation system. 
