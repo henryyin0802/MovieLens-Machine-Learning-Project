@@ -7,3 +7,4 @@ The foundation of the recommendation system is built by developing an algorithm 
 dl <- tempfile()
 download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
 ```
+# Machine Learning Methods
