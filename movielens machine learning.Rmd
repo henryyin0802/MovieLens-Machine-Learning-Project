@@ -1,0 +1,175 @@
+---
+title: "MovieLens Machine Learning Project"
+author: "Henry Chan"
+date: "December 26, 2019"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Executive Summary
+MovieLens Project is about creating a movie recommendation system using the well known MovieLens dataset which is included in the dslab package To make the computation easier, in this project the 10M version of the MovieLens dataset will be used which is just a small subset of a much larger latest entire MovieLens dataset with millions of ratings.
+
+The dataset consists of 10 millions of rows and 6 columns. The columns include userID, movieID, rating, timestamp, title and genres.
+
+The foundation of the recommendation system is built by developing an algorithm to predict the ratings of movies to that the users haven't given. Movies with high predicted ratings will be recommended to the users.
+
+# Machine Learning Methods
+##Data Preparation
+Before kicking start the machine learning, install the required packages and download the 10M MovieLens data file. Run the scripts to convert the data file into dataframe format. The dataframe is named as "movielens".
+
+```{r Install Necessary Packages}
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(caTools)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+if(!require(stringr)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+if(!require(simEd)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+if(!require(rstream)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+if(!require(stats)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+if(!require(tidyr)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+if(!require(lattice)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+if(!require(ggplot2)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+```
+
+```{r Download MovieLens data file}
+dl <- tempfile()
+download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+```
+
+```{r Convert the data file into dataframe}
+library(data.table)
+ratings <- fread(text = gsub("::", "\t", readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+library(stringr)
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+library(dplyr)
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))[movieId],
+                                           title = as.character(title),
+                                           genres = as.character(genres))
+movielens <- left_join(ratings, movies, by = "movieId")
+```
+
+##Split the dataset into training and test set
+To ensure that the data used in prediction is not included in training data used in building the algorithm, the dataset is splitted randomly into training set and valiation set by "caret" pacakge (here the random seed is set as 1). 10% of data is taken as test set. To make sure userId and movieId in test set also exist in training set, semi join to the test set against the training set is done.
+
+```{r Create training set and test set, test set will be 10% of data}
+
+library(caret)
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
+train <- movielens[-test_index,]
+temp <- movielens[test_index,]
+```
+
+```{r Make sure userId and movieId in test set are also in train set}
+test <- temp %>% 
+  semi_join(train, by = "movieId") %>%
+  semi_join(train, by = "userId")
+```
+
+```{r Add rows removed from test set back into train set}
+removed <- anti_join(temp, test)
+train <- rbind(train, removed)
+```
+
+```{r Remove unwanted tables}
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+```
+
+##Create RMSE function
+Create the function of RMSE which evaluates the prediction accuracy of the algorithm. RMSE represents the square root of the mean of the square of the difference between predicted values and observed values.
+
+```{r Create RMSE function}
+RMSE <- function(true_ratings, predicted_ratings){
+  sqrt(mean((true_ratings - predicted_ratings)^2))
+}
+```
+
+##Create the First Model
+The first model is a simple tryout by predicting the same rating for all movies regardless of user. Variable mu represents the average of all ratings in the training set.
+```{r First Model - Predict the same rating for all movies regardless of user}
+mu <- mean(train$rating)
+mu
+```
+
+Output the RMSE of the first model.
+```{r Predict all unknown ratings with mu and obtain the following RMSE by the First Model}
+model_1_rmse <- RMSE(test$rating, mu)
+model_1_rmse
+```
+
+Create a table that is going to compare the RMSE results of various models.
+```{r Create table recording RMSE of differnt models}
+rmse_results <- tibble(method = "Just the average", RMSE = model_1_rmse)
+```
+
+##Create the Second Model
+The second model takes the movie effect into account. Estimate the movie effect b_i by taking the mean of rating - mu by movieId.
+```{r Second Model - Modeling movie effect}
+movie_avgs <- train %>% group_by(movieId) %>% summarize(b_i = mean(rating - mu))
+```
+
+A histogram is plotted to see the distribution of b_i.
+```{r Histogram charting for movie effect b_i, echo=FALSE}
+movie_avgs %>% qplot(b_i, geom ="histogram", bins = 10, data = ., color = I("black"))
+```
+
+Predict the ratings in test set.
+```{r Find predicted ratings in test set for Second Model}
+predicted_ratings <- mu + test %>% left_join(movie_avgs, by='movieId') %>% pull(b_i)
+```
+
+Output the RMSE of the second model.
+```{r Obtain the RMSE of the Second Model}
+model_2_rmse <- RMSE(predicted_ratings, test$rating)
+model_2_rmse
+```
+
+Put the RMSE to the table.
+```{r Put the RMSE of Second Model to the table}
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie Effect Model",RMSE=model_2_rmse))
+```
+
+##Create the Third Model
+The third model adds the user effect on top of the second model. Estimate the user effect b_u by taking the mean of rating - mu - b_i by movieId.
+```{r Third Model - Modeling User effects}
+user_avgs <- train %>% left_join(movie_avgs, by='movieId') %>% group_by(userId) %>% summarize(b_u = mean(rating - mu - b_i))
+```
+
+A histogram is plotted to see the distribution of b_u.
+```{r Histogram charting for movie effect b_u, echo=FALSE}
+train %>% group_by(userId) %>% summarize(b_u = mean(rating)) %>% filter(n()>=100) %>% ggplot(aes(b_u)) + geom_histogram(bins = 30, color = "black")
+```
+
+Predict the ratings in test set.
+```{r Find predicted ratings in test set for Third Model}
+predicted_ratings <- test %>% left_join(movie_avgs, by='movieId') %>% left_join(user_avgs, by='userId') %>% mutate(pred = mu + b_i + b_u) %>% pull(pred)
+```
+
+Output the RMSE of the third model.
+```{r Obtain the RMSE of the Third Model}
+model_3_rmse <- RMSE(predicted_ratings, test$rating)
+model_3_rmse
+```
+
+Put the RMSE to the table.
+```{r Put the RMSE of Third Model to the table}
+rmse_results <- bind_rows(rmse_results,
+                          data_frame(method="Movie + User Effects Model",  
+                                     RMSE = model_3_rmse))
+```
+
+#Results
+```{r Review the RMSE table}
+rmse_results
+```
+Based on the RMSE results table, the Third Model, which includes both the movie and user effect, gives the lowest RMSE value at 0.864 and provides the best estimation.
+
+#Conclusion
+In the project 3 models are built. The first model, being a simple naive model, gives an initial idea that if the mean of all ratings in the training dataset is taken as the predicted value for all predictions, the RMSE is as high as more than 1. When the movie effect is introduced in the second model, the RMSE drops to 0.942. When user effect is further introduced in the third model, the prediction accuracy further improves and RMSE drops to 0.864. It is suggested to apply the Third Model in the movie recommendation system. 
